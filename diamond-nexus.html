@@ -194,6 +194,18 @@
         .canvas-wrapper canvas {
             border-radius: var(--radius-sm);
             image-rendering: pixelated;
+            max-width: 100%;
+            height: auto;
+        }
+
+        .canvas-panel, .viz-panel, .viz-grid-3col > *, .charts-section > * { min-width: 0; }
+        .viz-panel-body canvas { max-width: 100%; height: auto; }
+        button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+            outline: 2px solid var(--accent-tertiary);
+            outline-offset: 3px;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation: none !important; transition: none !important; }
         }
 
         /* Controls */
@@ -878,9 +890,11 @@
 <div class="app-container">
     <!-- Header -->
     <div class="header">
+        <nav aria-label="Project navigation" style="margin-bottom:20px;font-size:13px;display:flex;justify-content:center;gap:20px;flex-wrap:wrap"><a href="index.html" style="color:var(--accent-tertiary)">DIAMOND SIM</a><a href="worldlab.html" style="color:var(--accent-tertiary)">Open World Lab</a></nav>
         <div class="header-badge"><span class="dot"></span> EXPERIMENTAL BUILD v5.2 APEX</div>
         <h1>DIAMOND NEXUS</h1>
         <p class="subtitle">Hybrid World Model Simulation — Q-Learning · Neural Networks · Curiosity-Driven Exploration · Stigmergy Pheromone Trails · Diffusion World Prediction · Evolutionary Neuroevolution</p>
+        <p class="subtitle">Educational gridworld with heuristic denoising, depth-limited planning, reward normalization and rule-based feedback. Feature controls pause playback before applying changes.</p>
     </div>
 
     <!-- Main Canvases -->
@@ -891,7 +905,7 @@
                 <span class="canvas-panel-badge">LIVE</span>
             </div>
             <div class="canvas-wrapper">
-                <canvas id="world-canvas" width="600" height="600"></canvas>
+                <canvas id="world-canvas" width="600" height="600" role="img" aria-label="Reward landscape, obstacles and agent positions; agent statistics are listed below."></canvas>
             </div>
             <div class="legend">
                 <span class="legend-swatch" style="background:var(--reward-positive)"></span> Reward
@@ -906,7 +920,7 @@
                 <span class="canvas-panel-badge">DREAMING</span>
             </div>
             <div class="canvas-wrapper">
-                <canvas id="prediction-canvas" width="600" height="600"></canvas>
+                <canvas id="prediction-canvas" width="600" height="600" role="img" aria-label="Estimated reward landscape from the shared world model."></canvas>
             </div>
             <div class="legend">
                 <span class="legend-swatch" style="background:var(--curiosity)"></span> Curiosity
@@ -925,8 +939,8 @@
         </div>
         <div class="controls-divider"></div>
         <div class="controls-group">
-            <button class="btn btn-success" id="save-btn">⬇ Save</button>
-            <button class="btn" id="load-btn">⬆ Load</button>
+            <button class="btn btn-success" id="save-btn" title="Partial checkpoint: saves the world, agent values and policy weights. Loading resets replay, curiosity, pheromones and optimizer memory; future randomness is not replayed.">⬇ Save checkpoint</button>
+            <button class="btn" id="load-btn" title="Restore the saved partial checkpoint and pause playback.">⬆ Load</button>
         </div>
         <div class="controls-divider"></div>
         <div class="param-group">
@@ -1058,13 +1072,13 @@
             <span class="ft-dot" style="background:#f43f5e"></span> V8: Regret Critic
         </button>
         <button class="feature-toggle active" id="toggle-grpo" data-feature="grpo">
-            <span class="ft-dot" style="background:#ef4444"></span> V5: GRPO
+            <span class="ft-dot" style="background:#ef4444"></span> Group Reward Normalization
         </button>
         <button class="feature-toggle active" id="toggle-mcts" data-feature="mcts">
-            <span class="ft-dot" style="background:#10b981"></span> V5: MCTS Traces
+            <span class="ft-dot" style="background:#10b981"></span> Lookahead Traces
         </button>
         <button class="feature-toggle active" id="toggle-rlaif" data-feature="rlaif">
-            <span class="ft-dot" style="background:#8b5cf6"></span> V5: RLAIF Overseer
+            <span class="ft-dot" style="background:#8b5cf6"></span> Rule-Based Overseer
         </button>
     </div>
 
@@ -1235,7 +1249,7 @@
         <div class="viz-panel">
             <div class="viz-panel-header">
                 <span class="icon" style="width:8px;height:8px;border-radius:50%;background:#10b981;display:inline-block"></span>
-                MCTS Reasoning Paths
+                Lookahead Planning Paths
             </div>
             <div class="viz-panel-body">
                 <canvas id="reasoning-canvas" width="450" height="250"></canvas>
@@ -1243,7 +1257,7 @@
         </div>
         <div class="event-log-section" style="margin-bottom:0;">
             <div class="event-log-header">
-                <span>👁️ RLAIF Overseer Critique</span>
+                <span>👁️ Rule-Based Overseer Feedback</span>
                 <span class="canvas-panel-badge" id="rlaif-count">0 REVIEWS</span>
             </div>
             <div class="event-log-body" id="rlaif-log"></div>
@@ -1270,16 +1284,16 @@
     </div>
 
     <!-- Toast notification -->
-    <div class="toast" id="toast"></div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </div>
 
 <!-- Libraries -->
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
 
 <script>
 // ═══════════════════════════════════════════════════
-//  DIAMOND NEXUS v5.2 APEX — Research-Grade Simulation
+//  DIAMOND NEXUS v5.2 APEX — Educational Simulation
 // ═══════════════════════════════════════════════════
 
 // ── Configuration ──────────────────────────────────
@@ -1423,6 +1437,7 @@ class CuriosityModule {
             this.forwardModel.add(tf.layers.dense({ units: 2, activation: 'linear' }));
             this.forwardModel.compile({ optimizer: tf.train.adam(0.001), loss: 'meanSquaredError' });
         } catch (e) {
+            disposeNeuralModel(this.forwardModel);
             this.forwardModel = null;
         }
     }
@@ -1437,11 +1452,12 @@ class CuriosityModule {
     // Prediction error curiosity (ICM)
     async getPredictionError(state, actionIdx, nextState) {
         if (!this.forwardModel) return 0;
+        let input, predicted, target;
         try {
             const actionOneHot = [0, 0, 0, 0];
             actionOneHot[actionIdx] = 1;
-            const input = tf.tensor2d([[...state, ...actionOneHot]], [1, 6]);
-            const predicted = this.forwardModel.predict(input);
+            input = tf.tensor2d([[...state, ...actionOneHot]], [1, 6]);
+            predicted = this.forwardModel.predict(input);
             const predData = await predicted.data();
             
             // Prediction error = curiosity signal
@@ -1451,17 +1467,16 @@ class CuriosityModule {
             );
 
             // Train forward model
-            const target = tf.tensor2d([nextState], [1, 2]);
+            target = tf.tensor2d([nextState], [1, 2]);
             await this.forwardModel.fit(input, target, { epochs: 1, verbose: 0 });
-
-            // Dispose tensors
-            input.dispose();
-            predicted.dispose();
-            target.dispose();
 
             return error;
         } catch (e) {
             return 0;
+        } finally {
+            input?.dispose();
+            predicted?.dispose();
+            target?.dispose();
         }
     }
 
@@ -1579,6 +1594,7 @@ class DiffusionWorldModel {
             this.denoiseModel.add(tf.layers.dense({ units: 1, activation: 'tanh' }));
             this.denoiseModel.compile({ optimizer: tf.train.adam(0.001), loss: 'meanSquaredError' });
         } catch (e) {
+            disposeNeuralModel(this.denoiseModel);
             this.denoiseModel = null;
         }
     }
@@ -1909,13 +1925,13 @@ class DiffusionWorldModel {
 
     async trainOnExperience(state, nextState, x, y) {
         if (!this.denoiseModel) return;
+        let input, target;
         try {
-            const input = tf.tensor2d([[x / this.gridSize, y / this.gridSize, state, Math.random()]], [1, 4]);
-            const target = tf.tensor2d([[nextState / 10]], [1, 1]);
+            input = tf.tensor2d([[x / this.gridSize, y / this.gridSize, state, Math.random()]], [1, 4]);
+            target = tf.tensor2d([[nextState / 10]], [1, 1]);
             await this.denoiseModel.fit(input, target, { epochs: 1, verbose: 0 });
-            input.dispose();
-            target.dispose();
-        } catch (e) { /* silent */ }
+        } catch (e) { /* Optional model training may be unavailable. */ }
+        finally { input?.dispose(); target?.dispose(); }
     }
 }
 
@@ -2444,6 +2460,14 @@ function createGrid(size, fill = 0) {
     return Array.from({ length: size }, () => Array(size).fill(fill));
 }
 
+function disposeNeuralModel(model) {
+    if (!model) return;
+    // Optimizers were supplied explicitly at compile time and are owned here.
+    const optimizer = model.optimizer;
+    model.dispose();
+    if (optimizer && typeof optimizer.dispose === 'function') optimizer.dispose();
+}
+
 function createActionGrid(size) {
     return Array.from({ length: size }, () => Array.from({ length: size }, () => [0, 0, 0, 0]));
 }
@@ -2470,7 +2494,10 @@ function isEditableTarget(target) {
 
 function withSimulation(action) {
     if (!simulation) return false;
-    action(simulation);
+    Promise.resolve().then(() => action(simulation)).catch(error => {
+        console.error('Simulation action failed:', error);
+        showToast(`Action failed: ${error.message}`);
+    });
     return true;
 }
 
@@ -2488,6 +2515,8 @@ function updatePulseButtonLabel(isPulsing = false) {
 function syncUiFromSimulation() {
     updateRunButtonLabel();
     updatePulseButtonLabel(simulation?.isPulsing);
+    if (stepBtn) stepBtn.disabled = !!(simulation?.isRunning || simulation?.isPulsing || simulation?._stepPromise || simulation?._pendingMutations);
+    if (runBtn) runBtn.disabled = !!simulation?._pendingMutations;
 }
 
 class IntentForecastModel {
@@ -2969,7 +2998,9 @@ class SafetyShield {
 
     resolveAction(agent, rankedActions, gx, gy, env, diffusionModel, intentModel) {
         let fallback = rankedActions[0];
-        for (const candidate of rankedActions) {
+        // Preserve exploration whenever its sampled action is safe.
+        const ordered = [...rankedActions].sort((a, b) => Number(b.sampled) - Number(a.sampled));
+        for (const candidate of ordered) {
             const verdict = this.isAllowed(agent, candidate.index, gx, gy, env, diffusionModel, intentModel);
             if (verdict.allowed) return candidate.action;
             this.vetoCount++;
@@ -3230,6 +3261,7 @@ class HybridAgent {
             this.experts = [];
             for (let i = 0; i < 3; i++) {
                 const expert = tf.sequential();
+                this.experts.push(expert);
                 // Gated Sensory Fusion: 14 inputs -> 32 units
                 expert.add(tf.layers.dense({ units: 32, inputShape: [14], activation: 'relu' }));
                 expert.add(tf.layers.dropout({ rate: 0.1 }));
@@ -3241,18 +3273,24 @@ class HybridAgent {
                     metrics: ['accuracy']
                 });
                 if (expertWeights && expertWeights[i]) expert.setWeights(expertWeights[i]);
-                this.experts.push(expert);
             }
             this.lastHiddenVector = [0, 0, 0, 0];
         } catch (e) {
+            for (const expert of this.experts || []) disposeNeuralModel(expert);
             this.experts = null;
         }
+    }
+
+    dispose() {
+        for (const expert of this.experts || []) disposeNeuralModel(expert);
+        this.experts = null;
     }
 
     clone() {
         const clonedQTable = JSON.parse(JSON.stringify(this.qTable));
         const clonedWeights = this.experts ? this.experts.map(e => e.getWeights().map(w => w.clone())) : null;
         const clone = new HybridAgent(this.env, this.id, clonedQTable, clonedWeights);
+        if (clonedWeights) clonedWeights.flat().forEach(weight => weight.dispose());
         clone.species = this.species;
         clone.hue = this.hue;
         clone.role = this.role;
@@ -3291,6 +3329,7 @@ class HybridAgent {
         }
 
         const child = new HybridAgent(parentA.env, id, childQTable, childWeights);
+        if (childWeights) childWeights.flat().forEach(weight => weight.dispose());
         child.species = Math.random() < 0.5 ? parentA.species : parentB.species;
         child.hue = (parentA.hue + parentB.hue) / 2 + (Math.random() - 0.5) * 20;
         
@@ -3332,6 +3371,7 @@ class HybridAgent {
                     return tf.tensor(vals, w.shape);
                 });
                 this.experts[e].setWeights(mutated);
+                mutated.forEach(weight => weight.dispose());
             }
         }
         // Species mutation
@@ -3391,18 +3431,20 @@ class HybridAgent {
     }
 
     async predictAction(state) {
+        let input, predTensor;
         try {
             const gateIdx = this.routeExpert(state);
-            const input = tf.tensor2d([state], [1, 14]);
-            const predTensor = this.experts[gateIdx].predict(input);
+            if (!this.experts) return [0.25, 0.25, 0.25, 0.25];
+            input = tf.tensor2d([state], [1, 14]);
+            predTensor = this.experts[gateIdx].predict(input);
             const predData = await predTensor.data();
-            
-            input.dispose();
-            predTensor.dispose();
             
             return Array.from(predData);
         } catch (e) {
             return [0.25, 0.25, 0.25, 0.25];
+        } finally {
+            input?.dispose();
+            predTensor?.dispose();
         }
     }
 
@@ -3552,6 +3594,10 @@ class HybridAgent {
         const sumExp = expScores.reduce((a, b) => a + b, 0);
         const probs = expScores.map(e => e / sumExp);
 
+        // Epsilon mixes uniform exploration into the learned stochastic policy.
+        const exploration = clampValue(this.epsilon, 0, 1);
+        for (let i = 0; i < probs.length; i++) probs[i] = (1 - exploration) * probs[i] + exploration / probs.length;
+
         let r = Math.random(), cum = 0;
         let sampledAction = actions[3];
         for (let i = 0; i < 4; i++) {
@@ -3610,6 +3656,8 @@ class HybridAgent {
             const penalty = -5;
             this.totalReward += penalty;
             this.energy -= 1;
+            this.totalSteps++;
+            this.lastReward = penalty;
             this.updateQTable(augState, action, penalty, augState);
             if (FEATURES.stigmergy && stigmergy) {
                 stigmergy.deposit(newX, newY, 'danger', 0.5);
@@ -3787,44 +3835,47 @@ class HybridAgent {
 
     async trainNeuralNetwork(currentState, action, reward, nextState) {
         if (!this.experts) return;
+        let input, targetTensor;
         try {
             const gateIdx = this.routeExpert(currentState);
             const actions = ['up', 'down', 'left', 'right'];
             const actionIdx = actions.indexOf(action);
 
-            // PPO-Lite: Advantage-based policy update with clipping
-            // We use the reward signal as a proxy for advantage
+            // Reward-weighted supervised policy heuristic (not PPO).
             const advantage = Math.max(-2.0, Math.min(2.0, reward)); // Adaptive Clipping
             
             const target = new Array(4).fill(0.2); // Soft baseline
             target[actionIdx] = advantage > 0 ? 0.8 : 0.05; 
+            const total = target.reduce((sum, value) => sum + value, 0);
+            for (let i = 0; i < target.length; i++) target[i] /= total;
 
-            const input = tf.tensor2d([currentState], [1, 14]);
-            const targetTensor = tf.tensor2d([target], [1, 4]);
+            input = tf.tensor2d([currentState], [1, 14]);
+            targetTensor = tf.tensor2d([target], [1, 4]);
             
             const importance = Math.min(1.5, Math.abs(advantage));
-            const importanceTensor = tf.tensor1d([importance]);
             
             if (importance > 0.05) {
                 await this.experts[gateIdx].fit(input, targetTensor, { 
                     epochs: 1, 
-                    verbose: 0,
-                    sampleWeight: importanceTensor
+                    verbose: 0
                 });
             }
             
-            input.dispose();
-            targetTensor.dispose();
-            importanceTensor.dispose();
             
             if (FEATURES.communication) {
                 this.lastHiddenVector = await this.predictAction(currentState);
             }
-        } catch (e) { /* silent */ }
+        } catch (e) {
+            if (!this.trainingWarningShown) console.warn(`Policy training unavailable for agent ${this.id}:`, e);
+            this.trainingWarningShown = true;
+        } finally {
+            input?.dispose();
+            targetTensor?.dispose();
+        }
     }
 
     updateLearningParameters() {
-        this.epsilon = Math.max(this.epsilon * EPSILON_DECAY, MIN_EPSILON);
+        this.epsilon = this.epsilon === 0 ? 0 : Math.max(this.epsilon * EPSILON_DECAY, MIN_EPSILON);
         this.alpha = Math.max(this.alpha * ALPHA_DECAY, MIN_ALPHA);
     }
 }
@@ -3901,6 +3952,73 @@ class Environment {
 // ═══════════════════════════════════════════════════
 //  SIMULATION ENGINE
 // ═══════════════════════════════════════════════════
+function validateNexusCheckpoint(state) {
+    const require = (condition, field) => {
+        if (!condition) throw new Error(`Checkpoint has invalid ${field}`);
+    };
+    const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+    const count = value => Number.isSafeInteger(value) && value >= 0;
+    const tensor = (value, shape, cell = Number.isFinite) => shape.length
+        ? Array.isArray(value) && value.length === shape[0] && value.every(item => tensor(item, shape.slice(1), cell))
+        : cell(value);
+    const point = (value, limit, integer = false) => tensor(value, [2], coordinate =>
+        Number.isFinite(coordinate) && coordinate >= 0 && coordinate < limit && (!integer || Number.isInteger(coordinate)));
+    const optional = (object, field, check) => require(object[field] === undefined || check(object[field]), field);
+    require(record(state), 'state');
+    optional(state, 'checkpointVersion', value => value === 1);
+    optional(state, 'checkpointKind', value => value === 'partial');
+    require(state.env?.gridSize === GRID_SIZE, 'grid size');
+    require(tensor(state.env.state, [GRID_SIZE, GRID_SIZE], value => value === null || Number.isFinite(value)), 'environment grid');
+    require(Array.isArray(state.env.obstacles) && state.env.obstacles.every(value => point(value, GRID_SIZE, true)), 'obstacles');
+    require(Array.isArray(state.agents) && state.agents.length >= 1 && state.agents.length <= 24, 'population');
+    const actions = ['up', 'down', 'left', 'right'];
+    const weightShapes = [[14, 32], [32], [32, 16], [16], [16, 4], [4]];
+    for (const agent of state.agents) {
+        require(record(agent) && point(agent.position, CANVAS_SIZE), 'agent position');
+        require(record(agent.qTable) && Object.keys(agent.qTable).length === GRID_SIZE * GRID_SIZE, 'Q table');
+        for (let y = 0; y < GRID_SIZE; y++) for (let x = 0; x < GRID_SIZE; x++) {
+            const values = agent.qTable[`${x},${y}`];
+            require(record(values) && Object.keys(values).length === 4 && actions.every(action => Number.isFinite(values[action])), 'Q values');
+        }
+        require(Number.isFinite(agent.totalReward) && Number.isFinite(agent.energy) && count(agent.totalSteps), 'agent totals');
+        require(Array.isArray(agent.path) && agent.path.length <= 80 && agent.path.every(value => point(value, CANVAS_SIZE)), 'agent path');
+        for (const field of ['alpha', 'gamma', 'epsilon']) optional(agent, field, value => Number.isFinite(value) && value >= 0 && value <= 1);
+        optional(agent, 'species', count);
+        optional(agent, 'hue', Number.isFinite);
+        optional(agent, 'curiosityScore', Number.isFinite);
+        optional(agent, 'lastAction', value => actions.includes(value));
+        optional(agent, 'role', value => ['scout', 'harvester', 'sentinel'].includes(value));
+        optional(agent, 'roleColor', value => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value));
+        if (agent.modelWeights != null) {
+            require(Array.isArray(agent.modelWeights) && agent.modelWeights.length === 3 && agent.modelWeights.every(expert =>
+                Array.isArray(expert) && expert.length === weightShapes.length && expert.every((weight, i) => tensor(weight, weightShapes[i]))), 'policy weights');
+        }
+    }
+    require(count(state.totalSteps), 'step count');
+    optional(state, 'generation', value => count(value) && value >= 1);
+    optional(state, 'scenario', value => Object.hasOwn(SCENARIO_LABELS, value));
+    optional(state, 'focusedAgentId', value => value === null || (count(value) && value >= 1 && value <= state.agents.length));
+    for (const section of ['diffusionModel', 'strategyDirector', 'safetyShield', 'taskMarket', 'regretCritic']) {
+        optional(state, section, record);
+    }
+    const diffusion = state.diffusionModel || {};
+    for (const field of ['beliefState', 'observationCounts', 'uncertaintyState', 'predictedState', 'errorField']) {
+        optional(diffusion, field, value => tensor(value, [GRID_SIZE, GRID_SIZE]));
+    }
+    for (const field of ['avgUncertainty', 'recentError']) optional(diffusion, field, Number.isFinite);
+    optional(diffusion, 'resetCount', count);
+    const strategy = state.strategyDirector || {};
+    optional(strategy, 'mode', value => ['explore', 'harvest', 'survive', 'stabilize'].includes(value));
+    optional(strategy, 'roleBalance', Number.isFinite);
+    optional(strategy, 'roleCounts', value => record(value) && ['scout', 'harvester', 'sentinel'].every(role => count(value[role])));
+    optional(state.safetyShield || {}, 'vetoCount', count);
+    optional(state.safetyShield || {}, 'vetoField', value => tensor(value, [GRID_SIZE, GRID_SIZE]));
+    optional(state.taskMarket || {}, 'completedTasks', count);
+    optional(state.taskMarket || {}, 'marketFit', Number.isFinite);
+    optional(state.regretCritic || {}, 'regretMap', value => tensor(value, [GRID_SIZE, GRID_SIZE, 4]));
+    optional(state.regretCritic || {}, 'avgRegret', Number.isFinite);
+}
+
 class Simulation {
     constructor() {
         // DOM References & Contexts
@@ -3963,9 +4081,10 @@ class Simulation {
     }
 
     initializeAgents() {
+        for (const agent of this.agents) agent.dispose();
         this.agents = [];
-        POPULATION_SIZE = parseInt(numAgentsInput.value) || 12;
-        SELECTION_COUNT = Math.max(2, Math.floor(POPULATION_SIZE / 2));
+        POPULATION_SIZE = clampValue(parseInt(numAgentsInput.value) || 12, 1, 24);
+        SELECTION_COUNT = Math.max(1, Math.floor(POPULATION_SIZE / 2));
         for (let i = 0; i < POPULATION_SIZE; i++) {
             const agent = new HybridAgent(this.env, i + 1);
             agent.species = i % 3; // Assign initial species
@@ -3993,9 +4112,15 @@ class Simulation {
     }
 
     applyControlParameters() {
-        const alpha = clampValue(parseFloat(learningRateInput.value) || 0.1, MIN_ALPHA, 0.5);
-        const gamma = clampValue(parseFloat(discountFactorInput.value) || 0.95, 0.1, 0.99);
-        const epsilon = clampValue(parseFloat(epsilonInput.value) || 0.15, MIN_EPSILON, 0.5);
+        const read = (input, fallback, min, max) => {
+            const value = parseFloat(input.value);
+            const result = clampValue(Number.isFinite(value) ? value : fallback, min, max);
+            input.value = result;
+            return result;
+        };
+        const alpha = read(learningRateInput, 0.1, 0.01, 1);
+        const gamma = read(discountFactorInput, 0.95, 0.1, 1);
+        const epsilon = read(epsilonInput, 0.15, 0, 1);
 
         for (const agent of this.agents) {
             agent.alpha = alpha;
@@ -4044,24 +4169,25 @@ class Simulation {
             showToast('Pause the simulation before using Pulse');
             return;
         }
-        if (this.isPulsing) return;
+        if (this.isPulsing || this._pendingMutations) return;
 
+        const token = this._runToken || 0;
         this.setPulseState(true);
         try {
-            for (let i = 0; i < steps; i++) {
+            for (let i = 0; i < steps && token === (this._runToken || 0); i++) {
                 await this.step();
             }
-            this.focusLeader(false);
+            if (token === (this._runToken || 0)) this.focusLeader(false);
         } finally {
-            this.setPulseState(false);
+            if (token === (this._runToken || 0)) this.setPulseState(false);
         }
     }
 
-    applyScenarioPreset(mode, showMessage = true) {
+    async applyScenarioPreset(mode, showMessage = true) {
         this.currentScenario = SCENARIO_LABELS[mode] ? mode : 'balanced';
         if (scenarioSelect) scenarioSelect.value = this.currentScenario;
         this.stop();
-        this.reset();
+        await this.reset();
         if (showMessage) {
             showToast(`Scenario loaded: ${formatScenarioLabel(this.currentScenario)}`);
         }
@@ -4324,7 +4450,33 @@ class Simulation {
         });
     }
 
-    async step() {
+    step() {
+        if (this._pendingMutations) return Promise.resolve(false);
+        if (this._stepPromise) return this._stepPromise;
+        this._stepPromise = this._performStep().finally(() => {
+            this._stepPromise = null;
+            syncUiFromSimulation();
+        });
+        syncUiFromSimulation();
+        return this._stepPromise;
+    }
+
+    mutateWhenIdle(action) {
+        this.stop();
+        this._pendingMutations = (this._pendingMutations || 0) + 1;
+        syncUiFromSimulation();
+        const operation = (this._mutationTail || Promise.resolve()).then(async () => {
+            if (this._stepPromise) await this._stepPromise.catch(() => {});
+            return action();
+        });
+        this._mutationTail = operation.catch(() => {});
+        return operation.finally(() => {
+            this._pendingMutations--;
+            syncUiFromSimulation();
+        });
+    }
+
+    async _performStep() {
         this.totalSteps++;
 
         // Environment dynamics & Reward shaping
@@ -4429,26 +4581,35 @@ class Simulation {
     }
 
     start() {
-        if (!this.isRunning && !this.isPulsing) {
+        if (!this.isRunning && !this.isPulsing && !this._pendingMutations) {
             this.isRunning = true;
+            const token = this._runToken = (this._runToken || 0) + 1;
             syncUiFromSimulation();
             this.updateDirectorPanel();
-            this.runLoop();
+            this.runLoop(token).catch(error => {
+                if (token === this._runToken) this.stop();
+                console.error('Simulation stopped:', error);
+                showToast(`Simulation stopped: ${error.message}`);
+            });
         }
     }
 
     stop() {
         this.isRunning = false;
+        this.isPulsing = false;
+        this._runToken = (this._runToken || 0) + 1;
         syncUiFromSimulation();
         if (this.agents.length) this.updateDirectorPanel();
     }
 
     reset() {
-        this.stop();
+        return this.mutateWhenIdle(() => {
         this.currentScenario = scenarioSelect?.value || this.currentScenario || 'balanced';
         this.env.reset();
         this.applyScenarioModifiers(this.currentScenario);
         this.stigmergy.reset();
+        disposeNeuralModel(this.curiosityModule?.forwardModel);
+        disposeNeuralModel(this.diffusionModel?.denoiseModel);
         this.curiosityModule = new CuriosityModule();
         this.diffusionModel = new DiffusionWorldModel(GRID_SIZE);
         this.intentModel = new IntentForecastModel(GRID_SIZE);
@@ -4476,10 +4637,11 @@ class Simulation {
         this.focusLeader(false);
         this.updateDisplay();
         this.draw();
+        });
     }
 
-    async runLoop() {
-        while (this.isRunning) {
+    async runLoop(token = this._runToken) {
+        while (this.isRunning && token === this._runToken) {
             const now = performance.now();
             const speed = parseInt(agentSpeedInput.value) || 5;
             const interval = Math.max(10, 200 - speed * 20);
@@ -4492,6 +4654,7 @@ class Simulation {
     }
 
     performSelectionAndTraining() {
+        if (!this.agents.length) return;
         this.generation++;
         const sorted = [...this.agents].sort((a, b) => {
             // Multi-objective: reward + curiosity + energy efficiency
@@ -4500,29 +4663,30 @@ class Simulation {
             return scoreB - scoreA;
         });
 
-        const selected = sorted.slice(0, SELECTION_COUNT);
+        const parentAverageReward = this.agents.reduce((sum, agent) => sum + agent.totalReward, 0) / this.agents.length;
+        const selected = sorted.slice(0, Math.max(1, Math.min(SELECTION_COUNT, sorted.length)));
         const next = [];
 
         // Elitism
-        for (let i = 0; i < Math.min(3, SELECTION_COUNT); i++) {
+        for (let i = 0; i < Math.min(3, selected.length, POPULATION_SIZE); i++) {
             next.push(selected[i].clone());
         }
 
         // Crossover + mutation
         while (next.length < POPULATION_SIZE) {
-            const pA = selected[Math.floor(Math.random() * SELECTION_COUNT)];
-            const pB = selected[Math.floor(Math.random() * SELECTION_COUNT)];
+            const pA = selected[Math.floor(Math.random() * selected.length)];
+            const pB = selected[Math.floor(Math.random() * selected.length)];
             next.push(HybridAgent.crossover(pA, pB, next.length + 1));
         }
 
+        for (const agent of this.agents) agent.dispose();
         this.agents = next.map((agent, index) => {
             agent.id = index + 1;
             return agent;
         });
         
         // Evolving Adversary: Increase difficulty if performance is high
-        const avgReward = next.reduce((s, a) => s + a.totalReward, 0) / next.length;
-        if (avgReward > 100) {
+        if (parentAverageReward > 100) {
             this.dynEnv.adversaryStrength = Math.min(0.8, this.dynEnv.adversaryStrength + 0.05);
         } else {
             this.dynEnv.adversaryStrength = Math.max(0.1, this.dynEnv.adversaryStrength - 0.02);
@@ -4656,6 +4820,16 @@ class Simulation {
         for (const agent of this.agents) {
             const card = document.createElement('div');
             card.className = 'agent-card';
+            card.tabIndex = 0;
+            card.setAttribute('role', 'button');
+            card.setAttribute('aria-label', `Track agent ${agent.id}`);
+            card.setAttribute('aria-pressed', String(agent.id === this.focusedAgentId));
+            card.addEventListener('keydown', event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    this.focusAgent(agent.id);
+                }
+            });
             if (agent.id === this.focusedAgentId) {
                 card.classList.add('active');
             }
@@ -5146,8 +5320,14 @@ class Simulation {
     }
 
     saveSimulation() {
+        return this.mutateWhenIdle(() => this._saveSimulation());
+    }
+
+    _saveSimulation() {
         try {
             const state = {
+                checkpointVersion: 1,
+                checkpointKind: 'partial',
                 env: { gridSize: this.env.gridSize, state: this.env.state, obstacles: this.env.obstacles },
                 agents: this.agents.map(a => ({
                     qTable: a.qTable,
@@ -5181,86 +5361,117 @@ class Simulation {
                 totalSteps: this.totalSteps,
                 generation: this.generation
             };
+            validateNexusCheckpoint(state);
             localStorage.setItem('diamondNexusState', JSON.stringify(state));
-            console.log('Saved successfully');
+            showToast('Partial checkpoint saved in this browser');
+            return true;
         } catch (e) {
             console.error('Save failed:', e);
+            showToast(`Save failed: ${e.message}`);
+            return false;
         }
     }
 
     loadSimulation() {
-        const saved = localStorage.getItem('diamondNexusState');
-        if (!saved) return;
+        return this.mutateWhenIdle(() => this._loadSimulation());
+    }
+
+    _loadSimulation() {
+        let replacement = null;
         try {
-            this.stop();
+            const saved = localStorage.getItem('diamondNexusState');
+            if (!saved) { showToast('No saved checkpoint in this browser'); return false; }
             const state = JSON.parse(saved);
-            this.env.gridSize = state.env.gridSize;
-            this.env.state = state.env.state;
-            this.env.obstacles = state.env.obstacles;
-            this.agents = state.agents.map((d, i) => {
-                const weights = d.modelWeights && typeof tf !== 'undefined'
-                    ? d.modelWeights.map(expert => expert.map(w => tf.tensor(w)))
-                    : null;
-                const agent = new HybridAgent(this.env, i + 1, d.qTable, weights);
+            validateNexusCheckpoint(state);
+            // Construct and exercise every replacement before touching the active world.
+            // This checkpoint intentionally starts new replay, curiosity and pheromone memory.
+            replacement = { env: Object.assign(Object.create(Environment.prototype), {
+                gridSize: GRID_SIZE, state: state.env.state, obstacles: state.env.obstacles
+            }), agents: [] };
+            for (const [i, d] of state.agents.entries()) {
+                const tensors = [];
+                let agent;
+                try {
+                    const weights = d.modelWeights && typeof tf !== 'undefined'
+                        ? d.modelWeights.map(expert => expert.map(value => {
+                            const weight = tf.tensor(value);
+                            tensors.push(weight);
+                            return weight;
+                        })) : null;
+                    agent = new HybridAgent(replacement.env, i + 1, d.qTable, weights);
+                    replacement.agents.push(agent);
+                    if (weights && !agent.experts) throw new Error('Policy weights could not be restored');
+                } finally {
+                    for (const tensor of tensors) tensor.dispose();
+                }
                 agent.position = d.position;
                 agent.totalReward = d.totalReward;
                 agent.totalSteps = d.totalSteps;
                 agent.energy = d.energy;
                 agent.path = d.path;
                 agent.species = d.species || 0;
-                agent.hue = d.hue || (i * 30);
+                agent.hue = d.hue ?? (i * 30);
                 agent.curiosityScore = d.curiosityScore || 0;
-                agent.epsilon = d.epsilon || 0.1;
-                agent.alpha = d.alpha || 0.1;
-                agent.gamma = d.gamma || 0.95;
+                agent.epsilon = d.epsilon ?? 0.1;
+                agent.alpha = d.alpha ?? 0.1;
+                agent.gamma = d.gamma ?? 0.95;
                 agent.lastAction = d.lastAction || 'up';
                 agent.role = d.role || 'scout';
                 agent.roleColor = d.roleColor || '#60a5fa';
-                return agent;
-            });
-            POPULATION_SIZE = this.agents.length;
-            SELECTION_COUNT = Math.max(2, Math.floor(POPULATION_SIZE / 2));
-            numAgentsInput.value = POPULATION_SIZE;
-            document.getElementById('pop-label').textContent = `${POPULATION_SIZE} AGENTS`;
-            this.currentScenario = state.scenario || 'balanced';
-            this.focusedAgentId = state.focusedAgentId || null;
-            if (scenarioSelect) scenarioSelect.value = this.currentScenario;
-            this.eventLogger = new EventLogger();
-            this.dynEnv = new DynamicEnvironmentController(this.env);
-            this.rewardShaper = new RewardShaper(this.env.gridSize);
-            this.overseer = new OverseerMetaAgent();
-            this.mctsReasoner = new MCTSReasoner();
-            this.diffusionModel = new DiffusionWorldModel(this.env.gridSize);
-            this.diffusionModel.importState(state.diffusionModel);
-            this.intentModel = new IntentForecastModel(this.env.gridSize);
-            this.landmarkPlanner = new MultiscaleLandmarkPlanner(this.env.gridSize);
-            this.strategyDirector = new StrategyDirector(this.env.gridSize);
-            this.safetyShield = new SafetyShield(this.env.gridSize);
-            this.taskMarket = new TaskMarket(this.env.gridSize);
-            this.regretCritic = new CounterfactualRegretCritic(this.env.gridSize);
+            }
+            const next = replacement;
+            next.currentScenario = state.scenario || 'balanced';
+            next.focusedAgentId = state.focusedAgentId || null;
+            next.eventLogger = new EventLogger();
+            next.dynEnv = new DynamicEnvironmentController(next.env);
+            next.rewardShaper = new RewardShaper(GRID_SIZE);
+            next.overseer = new OverseerMetaAgent();
+            next.mctsReasoner = new MCTSReasoner();
+            next.stigmergy = new StigmergySystem(GRID_SIZE);
+            next.curiosityModule = new CuriosityModule();
+            next.diffusionModel = new DiffusionWorldModel(GRID_SIZE);
+            next.diffusionModel.importState(state.diffusionModel);
+            next.intentModel = new IntentForecastModel(GRID_SIZE);
+            next.landmarkPlanner = new MultiscaleLandmarkPlanner(GRID_SIZE);
+            next.strategyDirector = new StrategyDirector(GRID_SIZE);
+            next.safetyShield = new SafetyShield(GRID_SIZE);
+            next.taskMarket = new TaskMarket(GRID_SIZE);
+            next.regretCritic = new CounterfactualRegretCritic(GRID_SIZE);
             if (state.strategyDirector) {
-                this.strategyDirector.mode = state.strategyDirector.mode || 'explore';
-                this.strategyDirector.roleBalance = state.strategyDirector.roleBalance || 0;
-                this.strategyDirector.roleCounts = state.strategyDirector.roleCounts || { scout: 0, harvester: 0, sentinel: 0 };
+                next.strategyDirector.mode = state.strategyDirector.mode || 'explore';
+                next.strategyDirector.roleBalance = state.strategyDirector.roleBalance || 0;
+                next.strategyDirector.roleCounts = state.strategyDirector.roleCounts || { scout: 0, harvester: 0, sentinel: 0 };
             }
             if (state.safetyShield) {
-                this.safetyShield.vetoCount = state.safetyShield.vetoCount || 0;
-                this.safetyShield.vetoField = state.safetyShield.vetoField || createGrid(this.env.gridSize, 0);
+                next.safetyShield.vetoCount = state.safetyShield.vetoCount || 0;
+                next.safetyShield.vetoField = state.safetyShield.vetoField || createGrid(GRID_SIZE, 0);
             }
             if (state.taskMarket) {
-                this.taskMarket.completedTasks = state.taskMarket.completedTasks || 0;
-                this.taskMarket.marketFit = state.taskMarket.marketFit || 0;
+                next.taskMarket.completedTasks = state.taskMarket.completedTasks || 0;
+                next.taskMarket.marketFit = state.taskMarket.marketFit || 0;
             }
             if (state.regretCritic) {
-                this.regretCritic.regretMap = state.regretCritic.regretMap || createActionGrid(this.env.gridSize);
-                this.regretCritic.avgRegret = state.regretCritic.avgRegret || 0;
+                next.regretCritic.regretMap = state.regretCritic.regretMap || createActionGrid(GRID_SIZE);
+                next.regretCritic.avgRegret = state.regretCritic.avgRegret || 0;
             }
-            this.intentModel.update(this.agents, this.env, this.diffusionModel);
-            this.landmarkPlanner.update(this.diffusionModel, this.intentModel, this.env, this.agents);
-            this.strategyDirector.update(this.agents, this.env, this.diffusionModel, this.intentModel, this.stigmergy, state.totalSteps || 0, this.eventLogger);
-            this.taskMarket.update(this.agents, this.env, this.diffusionModel, this.intentModel, this.strategyDirector);
-            this.totalSteps = state.totalSteps;
-            this.generation = state.generation || 1;
+            next.totalSteps = state.totalSteps;
+            next.generation = state.generation || 1;
+            next.spectrogramData = [];
+            next.intentModel.update(next.agents, next.env, next.diffusionModel);
+            next.landmarkPlanner.update(next.diffusionModel, next.intentModel, next.env, next.agents);
+            next.strategyDirector.update(next.agents, next.env, next.diffusionModel, next.intentModel, next.stigmergy, next.totalSteps);
+            next.taskMarket.update(next.agents, next.env, next.diffusionModel, next.intentModel, next.strategyDirector);
+            const previous = { agents: this.agents, diffusion: this.diffusionModel, curiosity: this.curiosityModule };
+            Object.assign(this, next);
+            replacement = null;
+            for (const agent of previous.agents) agent.dispose();
+            disposeNeuralModel(previous.diffusion?.denoiseModel);
+            disposeNeuralModel(previous.curiosity?.forwardModel);
+            POPULATION_SIZE = this.agents.length;
+            SELECTION_COUNT = Math.max(1, Math.floor(POPULATION_SIZE / 2));
+            numAgentsInput.value = POPULATION_SIZE;
+            document.getElementById('pop-label').textContent = `${POPULATION_SIZE} AGENTS`;
+            if (scenarioSelect) scenarioSelect.value = this.currentScenario;
             this.initializeCharts();
             this.initDiffusionViz();
             this.updateDisplay();
@@ -5270,8 +5481,17 @@ class Simulation {
             this.draw();
             syncUiFromSimulation();
             console.log('Loaded successfully');
+            showToast('Partial checkpoint loaded; learning memory reset and playback paused');
+            return true;
         } catch (e) {
+            if (replacement) {
+                for (const agent of replacement.agents) agent.dispose();
+                disposeNeuralModel(replacement.diffusionModel?.denoiseModel);
+                disposeNeuralModel(replacement.curiosityModule?.forwardModel);
+            }
             console.error('Load failed:', e);
+            showToast(`Load failed: ${e.message}`);
+            return false;
         }
     }
 }
@@ -5279,8 +5499,6 @@ class Simulation {
 // ═══════════════════════════════════════════════════
 //  BOOTSTRAP
 // ═══════════════════════════════════════════════════
-if (false) {
-/*
 document.addEventListener('DOMContentLoaded', () => {
     try {
         simulation = new Simulation();
@@ -5294,74 +5512,12 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 resetBtn.addEventListener('click', () => {
-    withSimulation(sim => {
-        sim.stop();
-        sim.reset();
-    runBtn.textContent = '▶ Run';
+    withSimulation(sim => sim.reset());
 });
 
-stepBtn.addEventListener('click', () => simulation.step());
-
-runBtn.addEventListener('click', () => {
-    if (simulation.isRunning) {
-        simulation.stop();
-        runBtn.textContent = '▶ Run';
-    } else {
-        simulation.start();
-        runBtn.textContent = '⏸ Pause';
-    }
-});
-
-saveBtn.addEventListener('click', () => simulation.saveSimulation());
-loadBtn.addEventListener('click', () => simulation.loadSimulation());
-
-numAgentsInput.addEventListener('change', () => {
-    const n = parseInt(numAgentsInput.value);
-    if (n > 0 && n <= 24) {
-        POPULATION_SIZE = n;
-        SELECTION_COUNT = Math.max(2, Math.floor(n / 2));
-        simulation.initializeAgents();
-        simulation.initializeCharts();
-    }
-});
-
-diffusionStepsInput.addEventListener('change', () => {
-    simulation.initDiffusionViz();
-});
-
-document.querySelectorAll('.feature-toggle').forEach(btn => {
-    btn.addEventListener('click', () => {
-        const feature = btn.dataset.feature;
-        FEATURES[feature] = !FEATURES[feature];
-        btn.classList.toggle('active', FEATURES[feature]);
-    });
-});
-*/
-
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    try {
-        simulation = new Simulation();
-        document.body.dataset.simStatus = 'ready';
-        syncUiFromSimulation();
-        console.log('Simulation Initialized Successfully.');
-    } catch (e) {
-        document.body.dataset.simStatus = 'error';
-        console.error('Failed to initialize simulation:', e);
-    }
-});
-
-resetBtn.addEventListener('click', () => {
-    withSimulation(sim => {
-        sim.stop();
-        sim.reset();
-    });
-});
-
-stepBtn.addEventListener('click', async () => {
+stepBtn.addEventListener('click', () => {
     if (!simulation || simulation.isRunning || simulation.isPulsing) return;
-    await simulation.step();
+    withSimulation(sim => sim.step());
 });
 
 runBtn.addEventListener('click', () => {
@@ -5377,10 +5533,10 @@ runBtn.addEventListener('click', () => {
 saveBtn.addEventListener('click', () => withSimulation(sim => sim.saveSimulation()));
 loadBtn.addEventListener('click', () => withSimulation(sim => sim.loadSimulation()));
 
-const syncHyperparameters = () => withSimulation(sim => {
+const syncHyperparameters = () => withSimulation(sim => sim.mutateWhenIdle(() => {
     sim.applyControlParameters();
     sim.updateDisplay();
-});
+}));
 
 [learningRateInput, discountFactorInput, epsilonInput].forEach(input => {
     input.addEventListener('change', syncHyperparameters);
@@ -5394,7 +5550,7 @@ applyScenarioBtn?.addEventListener('click', () => {
 
 pulseBtn?.addEventListener('click', () => {
     withSimulation(sim => {
-        sim.pulse();
+        return sim.pulse();
     });
 });
 
@@ -5405,16 +5561,16 @@ focusLeaderBtn?.addEventListener('click', () => {
 numAgentsInput.addEventListener('change', () => {
     const n = parseInt(numAgentsInput.value);
     if (n > 0 && n <= 24) {
-        POPULATION_SIZE = n;
-        SELECTION_COUNT = Math.max(2, Math.floor(n / 2));
-        withSimulation(sim => {
-            sim.stop();
+        withSimulation(sim => sim.mutateWhenIdle(() => {
+            POPULATION_SIZE = n;
+            SELECTION_COUNT = Math.max(1, Math.floor(n / 2));
+            numAgentsInput.value = n;
             sim.initializeAgents();
             sim.initializeCharts();
             sim.updateDisplay();
             sim.draw();
             sim.focusLeader(false);
-        });
+        }));
     }
 });
 
@@ -5423,14 +5579,16 @@ diffusionStepsInput.addEventListener('change', () => {
 });
 
 document.querySelectorAll('.feature-toggle').forEach(btn => {
+    btn.setAttribute('aria-pressed', String(!!FEATURES[btn.dataset.feature]));
     btn.addEventListener('click', () => {
         const feature = btn.dataset.feature;
-        FEATURES[feature] = !FEATURES[feature];
-        btn.classList.toggle('active', FEATURES[feature]);
-        withSimulation(sim => {
+        withSimulation(sim => sim.mutateWhenIdle(() => {
+            FEATURES[feature] = !FEATURES[feature];
+            btn.classList.toggle('active', FEATURES[feature]);
+            btn.setAttribute('aria-pressed', String(FEATURES[feature]));
             sim.updateDisplay();
             sim.draw();
-        });
+        }));
     });
 });
 
@@ -5447,7 +5605,7 @@ document.addEventListener('keydown', async event => {
     if (key === 's') {
         event.preventDefault();
         if (!simulation || simulation.isRunning || simulation.isPulsing) return;
-        await simulation.step();
+        withSimulation(sim => sim.step());
         return;
     }
 
@@ -5470,7 +5628,7 @@ document.addEventListener('keydown', async event => {
 });
 
 console.log('%c DIAMOND NEXUS v5.2 APEX ', 'background: linear-gradient(135deg, #7c6aff, #38bdf8); color: white; font-size: 16px; padding: 8px 16px; border-radius: 8px; font-weight: bold;');
-console.log('Novel Features: PPO-Lite Policy | Adversarial Minimax | GRPO Coordination | DiscoRL Hyper-Evolution | Neural Spectrogram | Diffusion World Model');
+console.log('Educational features: reward-weighted policy | dynamic hazards | group reward normalization | hyperparameter evolution | reward spectrogram | heuristic denoising');
 </script>
 </body>
 </html>
